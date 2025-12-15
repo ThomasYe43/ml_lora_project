@@ -1,15 +1,17 @@
 import torch
+import multiprocessing
 from torch.utils.data import random_split, DataLoader
 from torchvision import datasets, transforms
 from pathlib import Path
 
 
 # Configuration constants
-BATCH_SIZE = 64
+BATCH_SIZE = 128
 NUM_WORKERS = 8
 IMG_SIZE = 224
 NUM_CLASSES = 101
 
+#print(multiprocessing.cpu_count())
 
 def get_transforms():
     # BASE transforms 
@@ -36,7 +38,7 @@ def get_transforms():
     return base_transforms, train_transforms
 
  
-def get_dataloaders(data_dir="data", batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, 
+def get_food101dataloaders(data_dir="data", batch_size=BATCH_SIZE, num_workers=NUM_WORKERS,
                     train_split=0.8, seed=42):
     data_dir = Path(data_dir)
     base_transforms, train_transforms = get_transforms()

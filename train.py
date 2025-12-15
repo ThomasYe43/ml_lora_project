@@ -71,14 +71,23 @@ def train_model(model,
     cost = nn.CrossEntropyLoss()
 
     # Create optimizer
+
+    trainable_params_list = [p for p in model.parameters() if p.requires_grad] #only train the trainables
+
     if optimizer_name == "Adam":
-        optimizer = optim.Adam(model.parameters(),
+        optimizer = optim.Adam(trainable_params_list,
                               lr=learning_rate,
                               weight_decay=weight_decay)
     elif optimizer_name == "RMSProp":
-        optimizer = optim.RMSprop(model.parameters(),
+        optimizer = optim.RMSprop(trainable_params_list,
                               lr=learning_rate,
                               weight_decay=weight_decay)
+
+    elif optimizer_name == "AdamW":
+        optimizer = optim.AdamW(trainable_params_list,
+                                lr=learning_rate,
+                                weight_decay=weight_decay)
+
     else:
         raise ValueError(f"Unsupported optimizer: {optimizer_name}")
     
@@ -111,7 +120,7 @@ def train_model(model,
                 imgs = imgs.to(device, non_blocking=True)
                 labels = labels.to(device, non_blocking=True)
 
-                optimizer.zero_grad()  # CRITICAL: Clear gradients
+                optimizer.zero_grad(set_to_none=True)  # CRITICAL: Clear gradients
                 
                 if scaler:
                     # AMP training steps
@@ -121,7 +130,7 @@ def train_model(model,
                     scaler.scale(loss).backward()
                     # Gradient clipping for stability
                     scaler.unscale_(optimizer)
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                    torch.nn.utils.clip_grad_norm_(trainable_params_list, max_norm=1.0)
                     scaler.step(optimizer)
                     scaler.update()
                 else:
@@ -130,7 +139,7 @@ def train_model(model,
                     loss = cost(out, labels)
                     loss.backward()
                     # Gradient clipping for stability
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                    torch.nn.utils.clip_grad_norm_(trainable_params_list, max_norm=1.0)
                     optimizer.step()
 
                 epoch_loss += loss.item()
