@@ -78,6 +78,7 @@ python train.py
 .
 ├── main.ipynb           # Main training notebook
 ├── models.py            # Model definitions (Baseline & LoRA)
+├── transformer.py       # ViT-B/16 (Baseline & LoRA)
 ├── data_loader.py       # Dataset loading utilities
 ├── train.py             # Training functions
 ├── requirements.txt     # Python dependencies
@@ -89,9 +90,9 @@ python train.py
 Key hyperparameters in notebook (Cell 3):
 
 ```python
-BATCH_SIZE = 32          # Adjust based on GPU memory
+BATCH_SIZE = 256         # Adjust based on GPU memory
 LEARNING_RATE = 0.0003   # Lower for stable fine-tuning
-NUM_EPOCHS = 15          # More epochs = better accuracy
+NUM_EPOCHS = 10          # More epochs = better accuracy (usually below 20)
 ```
 
 ## ⚠️ Important Notes
@@ -142,4 +143,5 @@ MIT License - feel free to use for your projects!
 - ResNet34 pretrained weights from torchvision
 - PEFT library for LoRA implementation
 - Food-101 and CIFAR-100 datasets
+
 
