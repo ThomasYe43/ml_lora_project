@@ -4,6 +4,9 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 import time
+import os
+import psutil
+
 
 
 def accuracy(model, data_loader, device, max_batches=None):
@@ -67,6 +70,17 @@ def train_model(model,
         scaler = torch.amp.GradScaler('cuda')
     else:
         scaler = None
+
+    process = psutil.Process(os.getpid())
+
+    def cpu_rss_gb():
+        return process.memory_info().rss / 1024 ** 3
+
+    cpu_start_gb = cpu_rss_gb()
+    cpu_peak_gb = cpu_start_gb
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats()
+        torch.cuda.synchronize()
 
     cost = nn.CrossEntropyLoss()
 
@@ -161,7 +175,10 @@ def train_model(model,
                     lst_train_acc.append(train_acc)
                     lst_val_acc.append(val_acc)
                     lst_val_loss.append(val_loss)
-                    
+
+                    # update CPU peak (sampled)
+                    cpu_peak_gb = max(cpu_peak_gb, cpu_rss_gb())
+
                     # Save best model based on validation accuracy
                     if save_best_model and val_acc > best_val_acc:
                         best_val_acc = val_acc
@@ -181,7 +198,9 @@ def train_model(model,
             epoch_time = time.time() - epoch_start_time
             epoch_times.append(epoch_time)
             avg_epoch_loss = epoch_loss / num_batches
-            
+
+            cpu_peak_gb = max(cpu_peak_gb, cpu_rss_gb())
+
             print(f"\nEpoch {epoch + 1} Summary:")
             print(f"  Average Training Loss: {avg_epoch_loss:.4f}")
             print(f"  Epoch Time: {epoch_time:.2f}s")
@@ -202,7 +221,29 @@ def train_model(model,
         if save_best_model:
             print(f"Best model saved to: {model_save_path}")
         print(f"{'='*60}\n")
-        
+
+        # ===== Print process-level resource usage =====
+        cpu_end_gb = cpu_rss_gb()
+
+        print("\n" + "-" * 60)
+        print("PROCESS RESOURCE USAGE (this Python process)")
+
+        print(f"CPU RSS Start: {cpu_start_gb:.2f} GB")
+        print(f"CPU RSS Peak : {cpu_peak_gb:.2f} GB")
+        print(f"CPU RSS End  : {cpu_end_gb:.2f} GB")
+
+        if device.type == "cuda":
+            torch.cuda.synchronize()
+            peak_alloc_gb = torch.cuda.max_memory_allocated() / 1024 ** 3
+            peak_reserved_gb = torch.cuda.max_memory_reserved() / 1024 ** 3
+            print(f"GPU Peak Allocated (torch): {peak_alloc_gb:.2f} GB")
+            print(f"GPU Peak Reserved  (torch): {peak_reserved_gb:.2f} GB")
+        else:
+            print("GPU: N/A (CPU training)")
+
+        print(f"Total Training Time: {total_training_time / 60:.2f} minutes")
+        print("-" * 60 + "\n")
+
         # Prepare metrics dictionary
         metrics = {
             'iters': iters,
@@ -216,6 +257,15 @@ def train_model(model,
             'trainable_params': trainable_params,
             'total_params': total_params
         }
+
+        metrics.update({
+            "cpu_rss_start_gb": cpu_start_gb,
+            "cpu_rss_peak_gb": cpu_peak_gb,
+            "cpu_rss_end_gb": cpu_end_gb,
+            "gpu_peak_alloc_gb": peak_alloc_gb if device.type == "cuda" else None,
+            "gpu_peak_reserved_gb": peak_reserved_gb if device.type == "cuda" else None,
+        })
+
 
     finally:
         # Plot training curves
