@@ -5,11 +5,7 @@ import timm
 import torch.nn.functional as F
 
 class FcLoRALinear(nn.Module):
-    """
-    线性层 + LoRA（只训练 ΔW）：
-    - 冻结原始全秩权重 W
-    - 只训练低秩增量 ΔW = B @ A
-    """
+
     def __init__(self, in_features, out_features, r=8, alpha=16.0, bias=True):
         super().__init__()
         self.in_features = in_features
@@ -18,24 +14,24 @@ class FcLoRALinear(nn.Module):
         self.alpha = alpha
         self.scaling = alpha / r
 
-        # 原始全秩权重 W（fc_base），被冻结
+        # freeze W
         self.fc_base = nn.Linear(in_features, out_features, bias=bias)
         for p in self.fc_base.parameters():
             p.requires_grad = False
 
-        # LoRA 参数：A: r x in, B: out x r
+        # lora：A: r x in, B: out x r
         self.lora_A = nn.Parameter(torch.zeros(r, in_features))
         self.lora_B = nn.Parameter(torch.zeros(out_features, r))
 
-        # 初始化：A 正态/Kaiming，B 全零（开始不影响输出）
+        
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
         nn.init.zeros_(self.lora_B)
 
     def forward(self, x):
-        # base：冻结的原始线性层
+        # base
         base = self.fc_base(x)  # [B, out_features]
 
-        # LoRA：x @ A^T -> [B, r]，再 @ B^T -> [B, out_features]
+        # LoRA：x @ A^T -> [B, r]， @ B^T -> [B, out_features]
         delta = (x @ self.lora_A.t()) @ self.lora_B.t()
         return base + self.scaling * delta
 
@@ -45,16 +41,16 @@ class FcLoRALinear(nn.Module):
 class ViT_Baseline(nn.Module):
     def __init__(self, model_name="vit_base_patch16_224", num_classes=101):
         super().__init__()
-        # 预训练 ViT
+        # pretrained ViT
         self.backbone = timm.create_model(model_name, pretrained=True)
 
-        # 冻结 backbone 除 head 外的所有参数
+        # freeze except head
         for name, param in self.backbone.named_parameters():
             if not name.startswith("head"):
                 param.requires_grad = False
 
-        # 替换 head 为适配 num_classes 的线性层
-        in_features = self.backbone.head.in_features  # 通常是 768
+        # replace head with num_classes 
+        in_features = self.backbone.head.in_features  
         self.backbone.head = nn.Linear(in_features, num_classes)
 
         print(f"ViT_Baseline created with frozen backbone, trainable head ({in_features} -> {num_classes})")
@@ -71,11 +67,11 @@ class ViT_FcLoRA(nn.Module):
         super().__init__()
         self.backbone = timm.create_model(model_name, pretrained=True)
 
-        # 冻结所有参数（包括原始 head）
+
         for param in self.backbone.parameters():
             param.requires_grad = False
 
-        # 用 FcLoRALinear 替换 head（只训练 LoRA 参数）
+        # replace head with FcLoRALinear 
         in_features = self.backbone.head.in_features
         self.backbone.head = FcLoRALinear(
             in_features=in_features,
