@@ -170,7 +170,7 @@ class ViT_AttnFT_HeadFT(nn.Module):
         super().__init__()
         self.backbone = timm.create_model(model_name, pretrained=True)
 
-        # freeze everything first
+        # freeze 
         for p in self.backbone.parameters():
             p.requires_grad = False
 
